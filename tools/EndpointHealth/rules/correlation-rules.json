@@ -1,0 +1,521 @@
+{
+  "schemaVersion": 1,
+  "description": "Correlation rules mapping collected telemetry and snapshot facts to known endpoint performance and hardware fault patterns. Each rule fires when every condition in 'all' is true and no condition in 'unless' is true. Metric names are produced by Invoke-TelemetryAnalysis.ps1; run it with -ListMetrics to print the full namespace for the current run.",
+  "operators": ["gt", "gte", "lt", "lte", "eq", "ne", "exists", "notexists", "contains", "notcontains", "matches"],
+  "rules": [
+
+    {
+      "id": "HW-001",
+      "title": "Hardware error architecture is logging machine check errors",
+      "category": "Hardware",
+      "severity": "Critical",
+      "all": [{ "metric": "events.whea.count", "op": "gt", "value": 0 }],
+      "explanation": "WHEA-Logger events mean the CPU or chipset reported a machine check exception. Corrected errors are usually a failing DIMM, a marginal CPU socket or an unstable PCIe link. Uncorrected errors bugcheck the box. This is a physical fault, not a software one, and it will not be fixed by reimaging.",
+      "recommendation": "Read the WHEA event payload for the error source. Run the vendor's memory and CPU diagnostic from a bootable image, not from inside Windows. Reseat or swap the DIMM the events point at. Check BIOS is current before condemning hardware, since several vendors ship microcode fixes for spurious corrected errors.",
+      "evidence": ["events.whea.count", "system.biosVersion", "system.biosAgeDays", "hardware.memoryModuleCount"]
+    },
+
+    {
+      "id": "HW-002",
+      "title": "SMART is predicting drive failure",
+      "category": "Storage",
+      "severity": "Critical",
+      "all": [{ "metric": "disk.smartPredictFailureCount", "op": "gt", "value": 0 }],
+      "explanation": "The storage driver has raised the SMART failure prediction bit. That flag is conservative; when it trips the drive is usually already returning correctable errors on reads.",
+      "recommendation": "Back up now and replace the drive. Do not run a surface scan first, since read pressure on a dying drive accelerates failure.",
+      "evidence": ["disk.smartPredictFailureCount", "disk.readErrorsTotal.max", "disk.reallocatedHint"]
+    },
+
+    {
+      "id": "HW-003",
+      "title": "Physical disk reporting a non-healthy status",
+      "category": "Storage",
+      "severity": "Critical",
+      "all": [{ "metric": "disk.unhealthyCount", "op": "gt", "value": 0 }],
+      "explanation": "Get-PhysicalDisk reports HealthStatus other than Healthy. On a workstation this is almost always a failing SSD or a drive that has exhausted its spare block pool.",
+      "recommendation": "Replace the drive. Capture the serial number from storage.json for the warranty claim.",
+      "evidence": ["disk.unhealthyCount", "disk.wearPercent.max", "disk.powerOnHours.max"]
+    },
+
+    {
+      "id": "HW-004",
+      "title": "SSD write endurance is nearly consumed",
+      "category": "Storage",
+      "severity": "High",
+      "all": [{ "metric": "disk.wearPercent.max", "op": "gte", "value": 80 }],
+      "explanation": "Reported wear is the percentage of rated write endurance used. Past roughly 80 percent, controllers start throttling writes and the drive can drop to read-only without warning.",
+      "recommendation": "Schedule replacement. If the wear is unexpectedly high for the drive's age, find what is writing: a misconfigured pagefile on a small SSD, a chatty log, or a backup agent rewriting the same data are the usual causes.",
+      "evidence": ["disk.wearPercent.max", "disk.powerOnHours.max", "disk.writeLatencyMs.p95"]
+    },
+
+    {
+      "id": "HW-005",
+      "title": "Uncorrected read or write errors on a physical disk",
+      "category": "Storage",
+      "severity": "High",
+      "all": [{ "metric": "disk.uncorrectedErrors.max", "op": "gt", "value": 0 }],
+      "explanation": "Uncorrected errors mean the drive could not recover the data. Any non-zero count is data loss that has already happened, whether or not the user has noticed which file.",
+      "recommendation": "Replace the drive and restore affected data from backup. Run chkdsk only after the data is safe elsewhere.",
+      "evidence": ["disk.uncorrectedErrors.max", "events.ntfs.count", "events.disk.count"]
+    },
+
+    {
+      "id": "HW-006",
+      "title": "Devices present that Windows cannot start",
+      "category": "Hardware",
+      "severity": "Medium",
+      "all": [{ "metric": "hw.problemDeviceCount", "op": "gt", "value": 0 }],
+      "explanation": "One or more devices report a ConfigManagerErrorCode other than zero. A failed storage controller, chipset or NIC driver often presents to the user as generic slowness rather than a missing device.",
+      "recommendation": "Review the device list in hardware.json. Code 28 is a missing driver, code 43 is a device that reported a failure, code 10 is a device that failed to start. Install the vendor driver pack rather than letting Windows Update guess.",
+      "evidence": ["hw.problemDeviceCount", "hw.problemDeviceNames"]
+    },
+
+    {
+      "id": "HW-007",
+      "title": "Laptop battery has lost most of its design capacity",
+      "category": "Hardware",
+      "severity": "Medium",
+      "all": [
+        { "metric": "system.isLaptop", "op": "eq", "value": true },
+        { "metric": "hw.batteryHealthPercent", "op": "lt", "value": 60 }
+      ],
+      "explanation": "Full charge capacity is below 60 percent of design capacity. Beyond the runtime complaint, several vendors throttle the CPU hard when the battery cannot supply peak current, which reads to the user as a slow machine.",
+      "recommendation": "Replace the battery. Verify whether the platform is throttling by comparing cpu.maxFreqPct while on AC against on battery.",
+      "evidence": ["hw.batteryHealthPercent", "cpu.maxFreqPct.avg"]
+    },
+
+    {
+      "id": "HW-008",
+      "title": "CPU is running well below its rated frequency",
+      "category": "Performance",
+      "severity": "High",
+      "all": [
+        { "metric": "cpu.maxFreqPct.p05", "op": "lt", "value": 60 },
+        { "metric": "cpu.total.p95", "op": "gt", "value": 50 }
+      ],
+      "explanation": "The processor is being held below its rated clock while under real load. The three causes, in order of likelihood, are thermal throttling from a blocked heatsink, a power policy capping the maximum processor state, and firmware throttling because of a failing battery or an underrated charger.",
+      "recommendation": "Check the thermal zone readings, then powercfg SUB_PROCESSOR PROCTHROTTLEMAX for the active plan. If both are clean, clean the heatsink and reapply thermal paste. On laptops confirm the charger matches the rated wattage.",
+      "evidence": ["cpu.maxFreqPct.p05", "cpu.total.p95", "hw.thermalMaxC", "power.activePlan", "hw.batteryHealthPercent"]
+    },
+
+    {
+      "id": "HW-009",
+      "title": "Thermal zone reporting high temperature",
+      "category": "Hardware",
+      "severity": "Medium",
+      "all": [{ "metric": "hw.thermalMaxC", "op": "gte", "value": 85 }],
+      "explanation": "An ACPI thermal zone is reading at or above 85C. Note that many vendors expose only a coarse zone here, so treat this as a prompt to measure properly rather than as a precise reading.",
+      "recommendation": "Confirm with the vendor's own utility or HWiNFO, then clean intakes and heatsink fins. Sustained high temperature with correlated low cpu.maxFreqPct confirms thermal throttling.",
+      "evidence": ["hw.thermalMaxC", "cpu.maxFreqPct.p05"]
+    },
+
+    {
+      "id": "STOR-001",
+      "title": "Sustained high disk read latency",
+      "category": "Storage",
+      "severity": "High",
+      "all": [{ "metric": "disk.readLatencyMs.p95", "op": "gt", "value": 25 }],
+      "explanation": "The 95th percentile read latency is above 25ms. On an SSD anything over about 5ms is abnormal; on a 7200rpm spindle 15 to 20ms is normal and the threshold is really about queueing. This is the single most common measurable cause of a machine that feels slow.",
+      "recommendation": "Correlate with disk.queue.p95 and the top IO process. High latency with a low queue points at the drive or controller. High latency with a high queue points at whatever is generating the IO. Check the deep captures for the file paths involved.",
+      "evidence": ["disk.readLatencyMs.p95", "disk.readLatencyMs.max", "disk.queue.p95", "disk.mediaTypes", "proc.topIo.name"]
+    },
+
+    {
+      "id": "STOR-002",
+      "title": "Sustained high disk write latency",
+      "category": "Storage",
+      "severity": "High",
+      "all": [{ "metric": "disk.writeLatencyMs.p95", "op": "gt", "value": 25 }],
+      "explanation": "Write latency at the 95th percentile is above 25ms. On an SSD this commonly means the drive is full enough that garbage collection cannot keep ahead of writes, or TRIM is disabled.",
+      "recommendation": "Check free space and TRIM status. Under 10 percent free on an SSD will produce exactly this. If free space is healthy and wear is low, suspect the controller or the SATA/NVMe link.",
+      "evidence": ["disk.writeLatencyMs.p95", "disk.freePercent.min", "disk.trimDisabled", "disk.wearPercent.max"]
+    },
+
+    {
+      "id": "STOR-003",
+      "title": "Storage stack logging IO retries or resets",
+      "category": "Storage",
+      "severity": "High",
+      "all": [{ "metric": "events.disk.count", "op": "gt", "value": 5 }],
+      "explanation": "Event IDs 153 (IO retried), 129 (controller reset) and 51 (paging error) mean the storage stack is recovering from failures. Each recovery is a multi-second stall the user experiences as a freeze.",
+      "recommendation": "Update the storage controller driver and drive firmware first, since both are common causes on SATA SSDs. If the events name a specific disk, correlate with its reliability counters. Persistent 129s usually mean the cable, backplane or controller rather than the drive.",
+      "evidence": ["events.disk.count", "disk.readLatencyMs.max", "disk.healthSummary"]
+    },
+
+    {
+      "id": "STOR-004",
+      "title": "NTFS is reporting file system corruption",
+      "category": "Storage",
+      "severity": "High",
+      "all": [{ "metric": "events.ntfs.count", "op": "gt", "value": 0 }],
+      "explanation": "Ntfs events in the 55 and 130 to 140 range mean structural corruption was detected on a volume. This follows bad hardware more often than it causes problems on its own.",
+      "recommendation": "Run chkdsk on the named volume during a maintenance window, then look for the underlying cause in the disk error and WHEA counts. Corruption that reappears after a clean chkdsk is a hardware problem.",
+      "evidence": ["events.ntfs.count", "events.disk.count", "events.whea.count"]
+    },
+
+    {
+      "id": "STOR-005",
+      "title": "System volume is critically low on free space",
+      "category": "Storage",
+      "severity": "High",
+      "all": [{ "metric": "disk.freePercent.min", "op": "lt", "value": 10 }],
+      "explanation": "Below 10 percent free, Windows cannot grow the pagefile, Windows Update staging fails, and SSD garbage collection loses its working room. Performance degrades non-linearly past this point.",
+      "recommendation": "Clear Windows Update cache, old profiles and shadow copies. Check for a runaway log. Anything under 5 percent should be treated as an outage waiting to happen.",
+      "evidence": ["disk.freePercent.min", "disk.freeGB.min", "disk.writeLatencyMs.p95"]
+    },
+
+    {
+      "id": "STOR-006",
+      "title": "TRIM is disabled on a solid state drive",
+      "category": "Storage",
+      "severity": "Medium",
+      "all": [
+        { "metric": "disk.trimDisabled", "op": "eq", "value": true },
+        { "metric": "disk.mediaTypes", "op": "contains", "value": "SSD" }
+      ],
+      "explanation": "DisableDeleteNotify is set, so Windows is not telling the SSD which blocks are free. Write performance degrades steadily and does not recover on its own.",
+      "recommendation": "Run fsutil behavior set DisableDeleteNotify 0, then let the drive idle or run the Optimize-Volume retrim. Find out what set it: some imaging tools and older SAN drivers disable it deliberately.",
+      "evidence": ["disk.trimDisabled", "disk.writeLatencyMs.p95", "disk.mediaTypes"]
+    },
+
+    {
+      "id": "MEM-001",
+      "title": "Machine is running out of physical memory",
+      "category": "Memory",
+      "severity": "High",
+      "all": [
+        { "metric": "mem.availableMB.p05", "op": "lt", "value": 500 },
+        { "metric": "mem.hardFaults.p95", "op": "gt", "value": 300 }
+      ],
+      "explanation": "Available memory is repeatedly under 500MB while the hard fault rate is high, meaning the machine is paging working set to disk to stay alive. Every one of those faults is a disk read in the user's critical path.",
+      "recommendation": "Identify the top consumers from the process telemetry. If it is a legitimate workload, add RAM; this is the one performance problem that hardware reliably fixes. If a single process is climbing steadily over days, it is a leak and needs the vendor.",
+      "evidence": ["mem.availableMB.p05", "mem.hardFaults.p95", "system.memoryGB", "proc.topMem.name", "proc.topMem.maxMB"]
+    },
+
+    {
+      "id": "MEM-002",
+      "title": "Committed memory is close to the commit limit",
+      "category": "Memory",
+      "severity": "Medium",
+      "all": [{ "metric": "mem.committedPct.max", "op": "gt", "value": 90 }],
+      "explanation": "Commit charge has exceeded 90 percent of the commit limit. At 100 percent, allocations start failing and applications crash with out-of-memory errors that look like random instability.",
+      "recommendation": "Check whether the pagefile is system managed. A fixed, undersized pagefile on a machine with heavy workloads is a common cause. Otherwise this is the same story as MEM-001 and needs RAM or a lighter workload.",
+      "evidence": ["mem.committedPct.max", "storage.pageFileAutoManaged", "system.memoryGB"]
+    },
+
+    {
+      "id": "MEM-003",
+      "title": "Non-paged pool is unusually large",
+      "category": "Memory",
+      "severity": "Medium",
+      "all": [{ "metric": "mem.poolNonpagedMB.max", "op": "gt", "value": 1024 }],
+      "explanation": "Non-paged pool over 1GB on a workstation usually means a kernel driver is leaking. Filter drivers from antivirus, VPN clients and storage vendors are the repeat offenders. Left alone it ends in a bugcheck.",
+      "recommendation": "Use poolmon or the WPR trace to find the leaking tag, then map the tag to its driver. Updating or removing that driver is the fix; a reboot only resets the clock.",
+      "evidence": ["mem.poolNonpagedMB.max", "events.bugCheck.count", "security.antivirusProducts"]
+    },
+
+    {
+      "id": "CPU-001",
+      "title": "Sustained high CPU utilisation",
+      "category": "Performance",
+      "severity": "High",
+      "all": [{ "metric": "cpu.total.p95", "op": "gt", "value": 85 }],
+      "explanation": "The machine spent at least five percent of the sampled window above 85 percent CPU. Sustained, this is either a real workload the hardware is undersized for, or a process stuck in a loop.",
+      "recommendation": "Start with proc.topCpu from the process telemetry, then open the WPR trace from the matching deep capture for the stacks. A single-threaded pegged process on a multi-core box shows as a modest total percentage, so check per-process figures, not just the total.",
+      "evidence": ["cpu.total.p95", "cpu.total.max", "proc.topCpu.name", "proc.topCpu.p95"]
+    },
+
+    {
+      "id": "CPU-002",
+      "title": "High kernel time relative to total CPU",
+      "category": "Performance",
+      "severity": "Medium",
+      "all": [
+        { "metric": "cpu.privileged.p95", "op": "gt", "value": 30 },
+        { "metric": "cpu.total.p95", "op": "gt", "value": 50 }
+      ],
+      "explanation": "A large share of CPU time is being spent in kernel mode. That points at driver work rather than application work: filter drivers, network stack processing, or storage retries.",
+      "recommendation": "Check the WPR trace for the driver consuming the time. Correlate with disk retry events and with how many real-time antivirus filter drivers are loaded.",
+      "evidence": ["cpu.privileged.p95", "cpu.interrupt.p95", "events.disk.count", "security.antivirusCount"]
+    },
+
+    {
+      "id": "CPU-003",
+      "title": "High interrupt time",
+      "category": "Performance",
+      "severity": "Medium",
+      "all": [{ "metric": "cpu.interrupt.p95", "op": "gt", "value": 10 }],
+      "explanation": "Interrupt time above 10 percent is abnormal on a healthy endpoint. It normally means a device is interrupting excessively: a failing NIC, a bad USB device, or a driver with broken interrupt moderation.",
+      "recommendation": "Unplug non-essential USB devices and re-measure, since that isolates it in minutes. If it persists, the WPR trace attributes interrupt time to a specific driver.",
+      "evidence": ["cpu.interrupt.p95", "hw.problemDeviceCount", "net.adapterErrors.total"]
+    },
+
+    {
+      "id": "CPU-004",
+      "title": "Processor queue is consistently backed up",
+      "category": "Performance",
+      "severity": "Medium",
+      "all": [{ "metric": "sys.processorQueue.p95", "op": "gt", "value": 10 }],
+      "explanation": "Threads are waiting for a core. A queue length consistently above roughly two per logical processor means the machine is CPU bound regardless of what the total percentage says.",
+      "recommendation": "Compare against the logical processor count before acting. If the workload is legitimate, the machine is undersized for its role.",
+      "evidence": ["sys.processorQueue.p95", "system.logicalProcessors", "cpu.total.p95"]
+    },
+
+    {
+      "id": "AV-001",
+      "title": "More than one real-time antivirus product is registered",
+      "category": "Security",
+      "severity": "High",
+      "all": [{ "metric": "security.antivirusCount", "op": "gt", "value": 1 }],
+      "explanation": "Two real-time scanners each inspect every file operation, and each sees the other's reads as new activity. The result is severe file IO amplification and, frequently, deadlocks that present as application hangs.",
+      "recommendation": "Decide which product is authoritative and fully remove the other with the vendor's removal tool. Disabling it is not enough, because the filter driver stays loaded.",
+      "evidence": ["security.antivirusCount", "security.antivirusNames", "disk.readLatencyMs.p95", "cpu.privileged.p95"]
+    },
+
+    {
+      "id": "AV-002",
+      "title": "Antimalware service is a top consumer of IO or CPU",
+      "category": "Security",
+      "severity": "Medium",
+      "all": [{ "metric": "proc.msmpeng.impact", "op": "gt", "value": 0 }],
+      "explanation": "MsMpEng is consistently among the heaviest processes for CPU or disk IO. On developer and imaging workstations this is normally real-time scanning of build output, VM disks or large data directories that should be excluded.",
+      "recommendation": "Add targeted exclusions for known-safe high-churn paths, and cap ScanAvgCPULoadFactor for scheduled scans. Exclude paths, not whole drives, and record the justification, which matters under HIPAA and similar frameworks.",
+      "evidence": ["proc.msmpeng.impact", "defender.exclusionPathCount", "defender.scanAvgCpuLoadFactor", "disk.readLatencyMs.p95"]
+    },
+
+    {
+      "id": "AV-003",
+      "title": "Defender real-time protection is off",
+      "category": "Security",
+      "severity": "High",
+      "all": [
+        { "metric": "defender.realTimeEnabled", "op": "eq", "value": false },
+        { "metric": "security.antivirusCount", "op": "lte", "value": 1 }
+      ],
+      "explanation": "Real-time protection is disabled and no third-party product has taken over. The endpoint is unprotected.",
+      "recommendation": "Re-enable it. If it will not stay enabled, check for a policy, a tamper-protection conflict or a previous third-party product that did not uninstall cleanly.",
+      "evidence": ["defender.realTimeEnabled", "defender.tamperProtected", "security.antivirusNames"]
+    },
+
+    {
+      "id": "IDX-001",
+      "title": "Search indexer is a sustained top IO consumer",
+      "category": "Performance",
+      "severity": "Low",
+      "all": [{ "metric": "proc.searchindexer.impact", "op": "gt", "value": 0 }],
+      "explanation": "SearchIndexer is consistently heavy on disk. A rebuilding index is normal for a few hours after a profile change or a large data copy; sustained across days means the index is corrupt and rebuilding in a loop, or it is indexing a redirected network location.",
+      "recommendation": "Check the indexed locations for a mapped drive or redirected folder. Rebuilding the index once is the fix for corruption; if it recurs, narrow the indexed scope.",
+      "evidence": ["proc.searchindexer.impact", "disk.readLatencyMs.p95"]
+    },
+
+    {
+      "id": "UPD-001",
+      "title": "Windows servicing stack is running heavy in the background",
+      "category": "Performance",
+      "severity": "Low",
+      "all": [{ "metric": "proc.tiworker.impact", "op": "gt", "value": 0 }],
+      "explanation": "TiWorker or TrustedInstaller is consistently consuming CPU or IO. Normal briefly around patching, and a sign of a stuck or looping servicing operation when it persists.",
+      "recommendation": "If it persists for more than a day, run DISM /Online /Cleanup-Image /RestoreHealth then sfc /scannow. A pending reboot that never happens keeps this running indefinitely.",
+      "evidence": ["proc.tiworker.impact", "software.pendingReboot"]
+    },
+
+    {
+      "id": "WMI-001",
+      "title": "WMI provider host is consuming significant CPU",
+      "category": "Performance",
+      "severity": "Medium",
+      "all": [{ "metric": "proc.wmiprvse.impact", "op": "gt", "value": 0 }],
+      "explanation": "WmiPrvSE running hot usually means something is polling WMI aggressively, often an inventory or monitoring agent running an unindexed query such as a Win32_Product enumeration, which also triggers an MSI reconfiguration of every installed package.",
+      "recommendation": "Enable the WMI-Activity operational log to identify the querying client. Replace Win32_Product queries with registry uninstall key reads in whatever agent is responsible.",
+      "evidence": ["proc.wmiprvse.impact", "events.wmi.count", "cpu.privileged.p95"]
+    },
+
+    {
+      "id": "GPU-001",
+      "title": "Display driver has been resetting",
+      "category": "Hardware",
+      "severity": "Medium",
+      "all": [{ "metric": "events.tdr.count", "op": "gt", "value": 0 }],
+      "explanation": "Event 4101 is a timeout detection and recovery: the display driver stopped responding and Windows restarted it. Users report this as the screen going black for a few seconds. Repeated TDRs mean a driver bug or a failing GPU.",
+      "recommendation": "Install the GPU vendor's driver directly rather than the Windows Update version. If TDRs continue on a current driver, test the card in another machine or with the integrated GPU to isolate it.",
+      "evidence": ["events.tdr.count", "hw.gpuDriverAgeDays.max", "hw.gpuNames"]
+    },
+
+    {
+      "id": "BOOT-001",
+      "title": "Boot time is consistently poor",
+      "category": "Performance",
+      "severity": "Medium",
+      "all": [{ "metric": "boot.timeMs.p95", "op": "gt", "value": 90000 }],
+      "explanation": "Measured boot time exceeds 90 seconds at the 95th percentile. Windows records what made it slow in the Diagnostics-Performance log, naming the specific service, driver or startup item.",
+      "recommendation": "Read events 101 through 110 in that log; they name the offender directly. Common causes are a startup item on a slow network path, an antivirus scan at boot, and Group Policy waiting on an unreachable domain controller.",
+      "evidence": ["boot.timeMs.p95", "boot.timeMs.max", "boot.count", "software.startupItemCount", "events.groupPolicy.count"]
+    },
+
+    {
+      "id": "BOOT-002",
+      "title": "Unexpected shutdowns are occurring",
+      "category": "Reliability",
+      "severity": "High",
+      "all": [{ "metric": "events.kernelPower41.count", "op": "gt", "value": 1 }],
+      "explanation": "Kernel-Power 41 means the machine stopped without a clean shutdown. More than one in the window is a power delivery problem, a bugcheck that failed to write a dump, or overheating.",
+      "recommendation": "Cross-reference against the bugcheck count. Event 41 with no bugcheck points at power: PSU, battery, charger or a loose connection. With bugchecks, the dump file is the next step.",
+      "evidence": ["events.kernelPower41.count", "events.bugCheck.count", "events.whea.count", "hw.thermalMaxC"]
+    },
+
+    {
+      "id": "BOOT-003",
+      "title": "System is bugchecking",
+      "category": "Reliability",
+      "severity": "Critical",
+      "all": [{ "metric": "events.bugCheck.count", "op": "gt", "value": 0 }],
+      "explanation": "WER-SystemErrorReporting 1001 records a stop error. The bugcheck code and parameters in the event narrow the cause substantially before anyone opens a dump.",
+      "recommendation": "Collect the minidump from C:\\Windows\\Minidump and run it through WinDbg with !analyze -v. Recurring bugchecks with the same driver name in the dump are a driver problem; varying codes with WHEA events alongside are usually memory.",
+      "evidence": ["events.bugCheck.count", "events.whea.count", "mem.poolNonpagedMB.max"]
+    },
+
+    {
+      "id": "BOOT-004",
+      "title": "Fast startup is enabled",
+      "category": "Reliability",
+      "severity": "Low",
+      "all": [{ "metric": "boot.fastStartupEnabled", "op": "eq", "value": 1 }],
+      "explanation": "Hiberboot is on, so a shutdown does not actually reset the kernel session. Uptime figures mislead, driver problems persist across what the user believes was a reboot, and some Group Policy and update operations do not apply.",
+      "recommendation": "Disable it on managed domain endpoints. It saves a few seconds of boot and costs a real reboot, which is a bad trade in a managed fleet.",
+      "evidence": ["boot.fastStartupEnabled", "system.uptimeDays"]
+    },
+
+    {
+      "id": "NET-001",
+      "title": "Network adapter is discarding or erroring packets",
+      "category": "Network",
+      "severity": "Medium",
+      "all": [{ "metric": "net.adapterErrors.total", "op": "gt", "value": 100 }],
+      "explanation": "A wired adapter with non-zero error and discard counters is a physical layer or driver problem, not a bandwidth problem. Cabling, a duplex mismatch and broken offload settings all show here.",
+      "recommendation": "Check the switch port counters for the matching side of the link. Replace the patch cable first since it is the cheapest test. If the counters are clean on the switch, disable receive-side offloads on the NIC to test the driver.",
+      "evidence": ["net.adapterErrors.total", "net.adapterDiscards.total", "net.linkSpeeds", "net.driverAgeDays.max"]
+    },
+
+    {
+      "id": "NET-002",
+      "title": "DNS client is logging name resolution failures",
+      "category": "Network",
+      "severity": "Medium",
+      "all": [{ "metric": "events.dnsClient.count", "op": "gt", "value": 10 }],
+      "explanation": "DNS-Client 1014 means a query timed out. Users experience this as applications hanging for several seconds at a time, which gets reported as a slow computer rather than a network problem.",
+      "recommendation": "Verify the adapter is using internal DNS servers only, with no public resolver appended. A public resolver in the list causes intermittent multi-second stalls when it is tried for internal names.",
+      "evidence": ["events.dnsClient.count", "net.dnsServers", "events.netlogon.count"]
+    },
+
+    {
+      "id": "NET-003",
+      "title": "Secure channel or domain controller connectivity problems",
+      "category": "Network",
+      "severity": "High",
+      "all": [{ "metric": "events.netlogon.count", "op": "gt", "value": 0 }],
+      "explanation": "Netlogon 5719 and related events mean the machine could not reach a domain controller. Consequences include slow logons, Group Policy not applying and mapped drives failing, all of which get reported as the computer being broken.",
+      "recommendation": "Check DNS first, since this is a name resolution problem far more often than a connectivity one. Confirm the machine's secure channel with Test-ComputerSecureChannel. Events clustered at boot usually mean the network stack is not ready before Netlogon starts.",
+      "evidence": ["events.netlogon.count", "events.dnsClient.count", "events.groupPolicy.count", "boot.timeMs.p95"]
+    },
+
+    {
+      "id": "NET-004",
+      "title": "SMB client connectivity errors",
+      "category": "Network",
+      "severity": "Medium",
+      "all": [{ "metric": "events.smbClient.count", "op": "gt", "value": 5 }],
+      "explanation": "SMB client connectivity events mean sessions to file servers are dropping. Explorer hangs while a dead session times out, which is one of the most common sources of a frozen desktop in an office environment.",
+      "recommendation": "Correlate the timestamps against the adapter error counters and against any wireless roaming. Check for SMB session timeouts driven by an intervening firewall aging out idle connections.",
+      "evidence": ["events.smbClient.count", "net.adapterErrors.total"]
+    },
+
+    {
+      "id": "GP-001",
+      "title": "Group Policy processing errors",
+      "category": "Configuration",
+      "severity": "Medium",
+      "all": [{ "metric": "events.groupPolicy.count", "op": "gt", "value": 3 }],
+      "explanation": "Group Policy is failing or timing out during processing. Beyond the logon delay, this means policy the environment depends on, including security settings, is not being applied.",
+      "recommendation": "Run gpresult /h against the machine and the user. Slow link detection against a distant or unreachable domain controller is the usual cause, followed by a script or drive map pointing at something that no longer exists.",
+      "evidence": ["events.groupPolicy.count", "events.netlogon.count", "boot.timeMs.p95"]
+    },
+
+    {
+      "id": "SVC-001",
+      "title": "Automatic services failing or timing out",
+      "category": "Reliability",
+      "severity": "Medium",
+      "all": [{ "metric": "events.serviceFailures.count", "op": "gt", "value": 5 }],
+      "explanation": "Service Control Manager is logging start failures or hangs. A service that times out at boot holds up everything behind it, and the dependency chain often means the user waits at the logon screen for it.",
+      "recommendation": "Identify the service from the events, then check whether it depends on a network resource that is not available that early. Delayed start is the usual fix for a service that only fails at boot.",
+      "evidence": ["events.serviceFailures.count", "software.autoServicesStoppedCount", "boot.timeMs.p95"]
+    },
+
+    {
+      "id": "APP-001",
+      "title": "Applications are hanging repeatedly",
+      "category": "Reliability",
+      "severity": "Medium",
+      "all": [{ "metric": "events.appHangs.count", "op": "gt", "value": 5 }],
+      "explanation": "Application Hang 1002 means a UI thread stopped pumping messages. When many different applications hang, the cause is usually shared and underneath them: disk latency, a network path, or an antivirus filter driver, rather than any one application.",
+      "recommendation": "Check whether the hangs cluster on one application or spread across several. Spread across several, work the storage and antivirus findings in this report first.",
+      "evidence": ["events.appHangs.count", "events.appCrashes.count", "disk.readLatencyMs.p95", "security.antivirusCount"]
+    },
+
+    {
+      "id": "APP-002",
+      "title": "Applications are crashing repeatedly",
+      "category": "Reliability",
+      "severity": "Medium",
+      "all": [{ "metric": "events.appCrashes.count", "op": "gt", "value": 10 }],
+      "explanation": "A high volume of Application Error 1000 events. Crashes concentrated in one application are a software problem. Crashes spread across unrelated applications, especially with varying fault modules, suggest memory or storage faults underneath.",
+      "recommendation": "Group the events by faulting module. If the faulting module varies randomly, prioritise the memory and storage findings in this report over chasing the applications.",
+      "evidence": ["events.appCrashes.count", "events.whea.count", "mem.availableMB.p05"]
+    },
+
+    {
+      "id": "CFG-001",
+      "title": "Reboot is pending",
+      "category": "Configuration",
+      "severity": "Low",
+      "all": [{ "metric": "software.pendingReboot", "op": "eq", "value": true }],
+      "explanation": "Servicing has staged changes that need a restart. Until it happens, some updates are half-applied and the servicing stack may keep working in the background.",
+      "recommendation": "Schedule the reboot. Combined with a long uptime, this frequently explains a machine that has gradually got slower.",
+      "evidence": ["software.pendingReboot", "system.uptimeDays", "proc.tiworker.impact"]
+    },
+
+    {
+      "id": "CFG-002",
+      "title": "Machine has not been restarted in a long time",
+      "category": "Configuration",
+      "severity": "Low",
+      "all": [{ "metric": "system.uptimeDays", "op": "gt", "value": 30 }],
+      "explanation": "Over 30 days of uptime on a workstation. Kernel pool fragmentation, driver leaks and unapplied updates all accumulate. Note that with fast startup enabled this figure can be misleading in the other direction.",
+      "recommendation": "Reboot, then re-measure. If the symptoms return on a predictable schedule after each reboot, something is leaking and the growth rate tells you roughly how fast.",
+      "evidence": ["system.uptimeDays", "boot.fastStartupEnabled", "mem.poolNonpagedMB.max"]
+    },
+
+    {
+      "id": "CFG-003",
+      "title": "System firmware is significantly out of date",
+      "category": "Configuration",
+      "severity": "Low",
+      "all": [{ "metric": "system.biosAgeDays", "op": "gt", "value": 1095 }],
+      "explanation": "The BIOS or UEFI firmware is more than three years old. Firmware updates in that window routinely include CPU microcode fixes, thermal and power management corrections, and storage compatibility fixes that present as exactly the symptoms this tool looks for.",
+      "recommendation": "Check the vendor's release notes before flashing. Update firmware before condemning hardware on a WHEA or throttling finding, since it is the cheaper test.",
+      "evidence": ["system.biosAgeDays", "system.biosVersion", "events.whea.count", "cpu.maxFreqPct.p05"]
+    },
+
+    {
+      "id": "CFG-004",
+      "title": "Large number of startup items",
+      "category": "Configuration",
+      "severity": "Low",
+      "all": [{ "metric": "software.startupItemCount", "op": "gt", "value": 15 }],
+      "explanation": "More than fifteen registry Run entries. Each one competes for disk during the first minute after logon, which is precisely when the user is trying to work.",
+      "recommendation": "Cross-reference against the boot degradation events, which name the specific items costing the most time. Remove or delay the ones with no business justification.",
+      "evidence": ["software.startupItemCount", "boot.timeMs.p95", "disk.readLatencyMs.p95"]
+    }
+
+  ]
+}

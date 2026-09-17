@@ -1,0 +1,46 @@
+{
+  "_comment": "Copy to config.json beside the scripts, or to C:\\ProgramData\\EndpointHealth\\config.json. Values here override the defaults in EndpointHealth.psm1. Anything you omit keeps its default. Command line parameters override this file.",
+
+  "SharePath": "\\\\fs01\\EndpointHealth$",
+  "LocalRoot": "C:\\ProgramData\\EndpointHealth",
+
+  "CampaignDays": 7,
+  "SampleIntervalMinutes": 5,
+  "UploadIntervalMinutes": 60,
+
+  "_comment_FolderNameStyle": "Compact gives HOST_9-17_1059. Sortable gives HOST_2026-09-17_1059, which sorts correctly in Explorer once you have runs from more than one month.",
+  "FolderNameStyle": "Compact",
+
+  "_comment_ToolsPath": "Optional binaries. Drop Procmon64.exe here to enable the Procmon engine, and smartctl.exe to get per-attribute SMART data that Windows does not surface. Neither is required.",
+  "ToolsPath": "C:\\ProgramData\\EndpointHealth\\bin",
+
+  "DeepCapture": {
+    "_comment": "Fired only when a trigger holds. WPR is built into Windows and needs nothing deployed. Procmon needs Procmon64.exe in ToolsPath.",
+    "Enabled": true,
+    "Engine": "WPR",
+    "DurationSeconds": 120,
+    "MaxPerDay": 6,
+    "CooldownMinutes": 60,
+    "MaxCaptureMB": 512,
+    "_comment_ProcmonConfig": "Path to a .pmc filter config exported from the Procmon GUI with Drop Filtered Events enabled. Without one, a two minute capture on a busy machine is several hundred MB.",
+    "ProcmonConfig": ""
+  },
+
+  "Triggers": {
+    "_comment": "A trigger fires only after it has held for ConsecutiveSamples passes, so a single spike does not burn a capture slot. Loosen these if you are getting no captures; tighten them if you are getting six a day and none of them show the problem.",
+    "ConsecutiveSamples": 2,
+    "CpuPercent": 90,
+    "DiskReadLatencyMs": 35,
+    "DiskWriteLatencyMs": 35,
+    "DiskQueueLength": 8,
+    "AvailableMemoryMB": 800,
+    "HardFaultsPerSec": 800,
+    "ProcessorQueue": 12
+  },
+
+  "_comment_MaxLocalStageMB": "Hard cap on staged data so a campaign that loses its share cannot fill the system drive. Oldest captures are pruned first; telemetry and the snapshot are never pruned.",
+  "MaxLocalStageMB": 4096,
+
+  "_comment_RedactUserNames": "Replaces the username segment in collected paths and process command lines. Consider enabling this if the share is visible to a wider audience than the people running the investigation.",
+  "RedactUserNames": false
+}
