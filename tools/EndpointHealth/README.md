@@ -1,5 +1,7 @@
 # EndpointHealth
 
+For setup and step-by-step operation, see [RUNBOOK.md](RUNBOOK.md).
+
 Point it at a Windows machine on the domain. It runs a bounded diagnostic
 campaign that survives reboots, drops everything into
 `\\share\COMPUTERNAME_9-17_1059`, and hands back a ranked list of findings
@@ -52,65 +54,6 @@ What none of them do cleanly is the narrow thing here: a single technician
 pointing at one machine, getting a bounded campaign with a fixed end date, and
 getting back a plain-text file that says what is wrong and what to do about it.
 That is the gap this fills.
-
----
-
-## Quick start
-
-```powershell
-# One-shot deep diagnostic. Start here on any machine you know nothing about.
-.\Deploy-EndpointHealth.ps1 -Mode Snapshot -SharePath \\fs01\EndpointHealth$
-
-# A week-long campaign on a machine with an intermittent problem.
-.\Deploy-EndpointHealth.ps1 -ComputerName WKS042 -Mode Campaign -Days 7 `
-    -SharePath \\fs01\EndpointHealth$
-
-# What is running on that machine right now?
-.\Deploy-EndpointHealth.ps1 -ComputerName WKS042 -Mode Status
-
-# End it early and collect the final data.
-.\Deploy-EndpointHealth.ps1 -ComputerName WKS042 -Mode Stop
-```
-
-All modes must run elevated. `Campaign` and `Stop` register and remove a
-scheduled task.
-
----
-
-## Share rights: the thing that will bite you
-
-The sampler runs as **SYSTEM**, which reaches the network as the machine
-account `DOMAIN\COMPUTERNAME$`. Not as you.
-
-A campaign that collects perfectly and uploads nothing is almost always this.
-Pick one:
-
-**Option A — grant the machine accounts write access (simplest)**
-
-```
-Share permissions: Domain Computers -> Change
-NTFS permissions:  Domain Computers -> Modify, this folder/subfolders/files
-```
-
-Tighten it by creating a security group, adding only the computer objects under
-investigation, and granting that group instead of `Domain Computers`.
-
-**Option B — run the task as a service account**
-
-```powershell
-.\Start-HealthCampaign.ps1 -SharePath \\fs01\EndpointHealth$ -Days 7 `
-    -RunAsUser 'CORP\svc-endpointhealth' `
-    -RunAsPassword (Read-Host 'Password' -AsSecureString)
-```
-
-The password is handed to Task Scheduler and is never written to
-`config.json`. Task Scheduler stores it in the credential vault; treat the
-account as a privileged one and scope it to nothing but that share.
-
-If the share is unreachable the agent keeps staging locally and retries on the
-next upload interval. Nothing is lost, it just does not arrive until the path
-works. `MaxLocalStageMB` caps how much it will hold before pruning old
-captures.
 
 ---
 

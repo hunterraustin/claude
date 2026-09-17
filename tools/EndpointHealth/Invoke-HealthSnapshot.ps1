@@ -608,18 +608,28 @@ $security = Invoke-Collector 'security posture' {
     }
     catch { }
 
+    # try/catch is a statement, not an expression, so these cannot sit inside a
+    # hashtable literal. Resolve each one first, then build the object.
+    $firewallProfiles = @()
+    try {
+        $firewallProfiles = Get-NetFirewallProfile -ErrorAction Stop |
+            ForEach-Object { [pscustomobject]@{ Name = $_.Name; Enabled = [bool]$_.Enabled } }
+    }
+    catch { }
+
+    $secureBoot = $null
+    try { $secureBoot = Confirm-SecureBootUEFI -ErrorAction Stop } catch { }
+
+    $tpmPresent = $null
+    try { $tpmPresent = (Get-Tpm -ErrorAction Stop).TpmPresent } catch { }
+
     [pscustomobject]@{
         Defender          = $defender
         AntivirusProducts = @($avProducts)
         AntivirusCount    = @($avProducts).Count
-        FirewallProfiles  = @(
-            try {
-                Get-NetFirewallProfile -ErrorAction Stop |
-                    ForEach-Object { [pscustomobject]@{ Name = $_.Name; Enabled = [bool]$_.Enabled } }
-            } catch { }
-        )
-        SecureBootEnabled = try { Confirm-SecureBootUEFI -ErrorAction Stop } catch { $null }
-        TpmPresent        = try { (Get-Tpm -ErrorAction Stop).TpmPresent } catch { $null }
+        FirewallProfiles  = @($firewallProfiles)
+        SecureBootEnabled = $secureBoot
+        TpmPresent        = $tpmPresent
     }
 }
 
@@ -634,7 +644,8 @@ $network = Invoke-Collector 'network configuration' {
     try {
         $adapters = Get-NetAdapter -ErrorAction Stop | Where-Object { $_.Status -eq 'Up' } | ForEach-Object {
             $a = $_
-            $stats = try { $a | Get-NetAdapterStatistics -ErrorAction Stop } catch { $null }
+            $stats = $null
+            try { $stats = $a | Get-NetAdapterStatistics -ErrorAction Stop } catch { }
             [pscustomobject]@{
                 Name            = $a.Name
                 InterfaceDescription = $a.InterfaceDescription
@@ -680,22 +691,31 @@ $network = Invoke-Collector 'network configuration' {
     }
     catch { }
 
+    # Same rule as the security collector: resolve first, then build the object.
+    $proxySettings = $null
+    try {
+        $p = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings' -ErrorAction Stop
+        $proxySettings = [pscustomobject]@{ ProxyEnable = $p.ProxyEnable; AutoConfigURL = $p.AutoConfigURL }
+    }
+    catch { }
+
+    $smbClientConfig = $null
+    try {
+        $s = Get-SmbClientConfiguration -ErrorAction Stop
+        $smbClientConfig = [pscustomobject]@{
+            SessionTimeout         = $s.SessionTimeout
+            OplocksDisabled        = $s.OplocksDisabled
+            DirectoryCacheLifetime = $s.DirectoryCacheLifetime
+        }
+    }
+    catch { }
+
     [pscustomobject]@{
-        Adapters       = @($adapters)
-        IPConfiguration= @($ip)
-        TcpCounters    = $tcpStats
-        ProxySettings  = try {
-                            $p = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings' -ErrorAction Stop
-                            [pscustomobject]@{ ProxyEnable = $p.ProxyEnable; AutoConfigURL = $p.AutoConfigURL }
-                         } catch { $null }
-        SmbClientConfig= try {
-                            $s = Get-SmbClientConfiguration -ErrorAction Stop
-                            [pscustomobject]@{
-                                SessionTimeout   = $s.SessionTimeout
-                                OplocksDisabled  = $s.OplocksDisabled
-                                DirectoryCacheLifetime = $s.DirectoryCacheLifetime
-                            }
-                         } catch { $null }
+        Adapters        = @($adapters)
+        IPConfiguration = @($ip)
+        TcpCounters     = $tcpStats
+        ProxySettings   = $proxySettings
+        SmbClientConfig = $smbClientConfig
     }
 }
 
