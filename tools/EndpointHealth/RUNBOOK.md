@@ -108,7 +108,7 @@ Get-ChildItem $dst -Recurse -File | Select-Object FullName
 `Unblock-File` is not optional. Files that came out of a GitHub zip carry the
 mark of the web and will not run until they are unblocked.
 
-That last line should print 15 files, one of them ending in
+That last line should print 16 files, one of them ending in
 `rules\correlation-rules.json`. **Keep the folder structure.** The scripts
 resolve paths relative to themselves, and the analysis step looks for the
 `rules` subfolder. Flatten it and every run fails.
@@ -116,6 +116,10 @@ resolve paths relative to themselves, and the analysis step looks for the
 Leave `config.sample.json` alone. Only `config.json` is read, and passing
 `-SharePath` on the command line writes one to
 `C:\ProgramData\EndpointHealth\config.json` for you.
+
+A `config.json` sitting beside the scripts takes precedence over the one under
+ProgramData. Keep one or the other, not both, or you will edit the file that is
+being ignored.
 
 ### Syntax check after any edit
 
@@ -172,9 +176,30 @@ New-NetFirewallRule -DisplayName "EndpointHealth console" -Direction Inbound `
 .\Start-HealthConsole.ps1 -AllowedGroup 'CORP\FCCI-EndpointHealth-Admins'
 ```
 
+Two steps that are easy to miss and will otherwise cost you an afternoon:
+
+**Register the SPN.** Because the console runs as a domain service account
+rather than the machine account, Kerberos needs an SPN pointing at that
+account. Without it, Negotiate quietly falls back to NTLM, or fails outright
+where Extended Protection is enforced.
+
+```powershell
+setspn -S HTTP/ehconsole.corp.local CORP\svc-endpointhealth
+setspn -L CORP\svc-endpointhealth
+```
+
+A duplicate SPN registered on two accounts breaks Kerberos for both, so check
+the listing.
+
+**Put the console in the Local Intranet zone.** Browsers only send Windows
+credentials silently to sites they treat as intranet. Without this your techs
+get a credential prompt, which defeats the entire point of not having a login
+form. Push it by GPO.
+
 Techs then browse to `https://ehconsole.corp.local:8443/`. Kerberos signs them
 in silently with the credentials they already have. Nobody types a password,
-and anyone outside the group gets a 403.
+and anyone outside the group gets a 403. Prove that last part by signing in as
+an account outside the group and confirming it is refused.
 
 Skip steps 1 to 5 entirely if you just want it on your own machine:
 

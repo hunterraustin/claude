@@ -152,8 +152,19 @@ if ($scheme -eq 'https') {
 
 #region state ---------------------------------------------------------------
 
-$script:Config     = Get-EHConfig -ConfigPath $ConfigPath
-$script:ConfigFile = Join-Path $script:Config.LocalRoot 'config.json'
+$script:Config = Get-EHConfig -ConfigPath $ConfigPath
+
+# Save back to whatever file was actually loaded. Get-EHConfig prefers a
+# config.json sitting beside the scripts over the one under LocalRoot, so
+# writing blindly to LocalRoot would leave saved settings silently ignored on
+# the next start.
+$script:ConfigFile = $null
+if ($script:Config.PSObject.Properties['ConfigPath'] -and $script:Config.ConfigPath) {
+    $script:ConfigFile = [string]$script:Config.ConfigPath
+}
+if (-not $script:ConfigFile) {
+    $script:ConfigFile = Join-Path $script:Config.LocalRoot 'config.json'
+}
 $script:Jobs       = @{}
 $script:Token      = [guid]::NewGuid().ToString('N')
 $script:ToolkitRoot = $PSScriptRoot

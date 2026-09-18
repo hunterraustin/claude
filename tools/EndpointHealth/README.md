@@ -1,6 +1,20 @@
 # EndpointHealth
 
+> **Status: beta. Not yet run on Windows.**
+>
+> Every script parses cleanly, the rules engine and the HTML report have been
+> executed against synthetic data, and the console's endpoints and security
+> controls have been exercised. All of that was done under PowerShell 7 on
+> Linux. **No collector has ever run against real Windows, no campaign has
+> completed, and nothing has been exercised under Windows PowerShell 5.1**,
+> which is the runtime the scheduled task actually uses.
+>
+> Work through [TESTING.md](TESTING.md) on a lab machine before this goes
+> anywhere near a clinical endpoint. It is ordered so that each phase proves
+> the thing the next phase depends on.
+
 For setup and step-by-step operation, see [RUNBOOK.md](RUNBOOK.md).
+For proving it works, see [TESTING.md](TESTING.md).
 
 Point it at a Windows machine on the domain. It runs a bounded diagnostic
 campaign that survives reboots, drops everything into
@@ -138,7 +152,7 @@ a share where nobody has word wrap turned on.
 
 `Invoke-TelemetryAnalysis.ps1` flattens the snapshot and the telemetry into one
 metric namespace, then evaluates `rules\correlation-rules.json` against it.
-Roughly 40 rules ship, covering:
+45 rules ship, covering:
 
 - Hardware faults: WHEA machine checks, SMART failure prediction, SSD wear,
   uncorrected read/write errors, dead devices, battery collapse
@@ -243,6 +257,7 @@ Neither is required and both are skipped silently when absent.
 | `New-HealthReport.ps1` | Builds REPORT.html, the traceable view of the findings. |
 | `Start-HealthConsole.ps1` | Browser console. Kerberos auth, AD group gated. |
 | `console\index.html` | The console UI. Served by the console, not opened directly. |
+| `TESTING.md` | Phase-by-phase test plan with explicit pass conditions. |
 | `EndpointHealth.psm1` | Shared library. |
 | `rules\correlation-rules.json` | The findings logic. Edit this, not the code. |
 | `config.sample.json` | Copy to `config.json` and edit. |

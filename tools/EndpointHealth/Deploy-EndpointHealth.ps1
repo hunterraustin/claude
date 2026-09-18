@@ -83,7 +83,6 @@ $toolkitFiles = @(
     'Invoke-DeepCapture.ps1'
     'Invoke-TelemetryAnalysis.ps1'
     'New-HealthReport.ps1'
-    'Start-HealthConsole.ps1'
     'Start-HealthCampaign.ps1'
     'Stop-HealthCampaign.ps1'
     'Deploy-EndpointHealth.ps1'
