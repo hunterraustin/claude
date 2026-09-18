@@ -97,7 +97,8 @@ the scheduled task on the target, not from your session.
 
 ```
 \\fs01\EndpointHealth$\WKS042_9-17_1059\
-├── SUMMARY.txt              <- read this first
+├── REPORT.html              <- open this first, findings with their evidence
+├── SUMMARY.txt              <- same findings as plain text
 ├── findings.json            <- same findings, machine readable
 ├── metrics.json             <- every metric the run produced
 ├── manifest.json
@@ -239,6 +240,7 @@ Neither is required and both are skipped silently when absent.
 | `Invoke-TelemetrySample.ps1` | One sampler iteration. Called by the task. |
 | `Invoke-DeepCapture.ps1` | Trigger-fired WPR / Procmon burst. |
 | `Invoke-TelemetryAnalysis.ps1` | Rules engine, writes SUMMARY.txt. |
+| `New-HealthReport.ps1` | Builds REPORT.html, the traceable view of the findings. |
 | `EndpointHealth.psm1` | Shared library. |
 | `rules\correlation-rules.json` | The findings logic. Edit this, not the code. |
 | `config.sample.json` | Copy to `config.json` and edit. |

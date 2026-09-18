@@ -765,6 +765,19 @@ if (-not $Quiet) {
 }
 Write-EHLog ("Analysis complete: {0} finding(s) from {1} rule(s)." -f $ranked.Count, @($ruleDoc.rules).Count)
 
+# Self-contained HTML view of the same findings. Guarded on purpose: a report
+# failure must never cost the run its SUMMARY.txt or findings.json.
+try {
+    $reportScript = Join-Path $PSScriptRoot 'New-HealthReport.ps1'
+    if (Test-Path -LiteralPath $reportScript) {
+        & $reportScript -RunPath $layout.Root -RulesPath $RulesPath | Out-Null
+        Write-EHLog 'REPORT.html written.'
+    }
+}
+catch {
+    Write-EHLog ("HTML report generation failed: {0}" -f $_.Exception.Message) -Level WARN
+}
+
 #endregion
 
 $report

@@ -108,7 +108,7 @@ Get-ChildItem $dst -Recurse -File | Select-Object FullName
 `Unblock-File` is not optional. Files that came out of a GitHub zip carry the
 mark of the web and will not run until they are unblocked.
 
-That last line should print 11 files, one of them ending in
+That last line should print 13 files, one of them ending in
 `rules\correlation-rules.json`. **Keep the folder structure.** The scripts
 resolve paths relative to themselves, and the analysis step looks for the
 `rules` subfolder. Flatten it and every run fails.
@@ -192,12 +192,18 @@ you are finishing early.
 ## Part 5. Read the answer
 
 ```
-\\FS01\EndpointHealth$\WKS042_9-17_1059\SUMMARY.txt
+\\FS01\EndpointHealth$\WKS042_9-17_1059\REPORT.html
 ```
 
-Folder name is `COMPUTERNAME_month-day_time`. Open `SUMMARY.txt` in Notepad.
-Findings are worst first, and each says what was seen, why it matters, and what
-to do. That is the deliverable. Attach it to the ticket.
+Folder name is `COMPUTERNAME_month-day_time`. Open `REPORT.html` in any browser,
+straight off the share. Findings are worst first. Open one and it shows the
+exact comparison that fired it, the observed value, and which collector file
+that value was read from, so you can check any conclusion against the raw data
+sitting next to it. It also lists every rule that did not fire, so you can see
+what was checked and found clean.
+
+`SUMMARY.txt` in the same folder is the same findings as plain text, for
+pasting into a ticket.
 
 Supporting evidence in the same folder:
 
