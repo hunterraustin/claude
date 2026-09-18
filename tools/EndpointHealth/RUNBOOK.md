@@ -108,7 +108,7 @@ Get-ChildItem $dst -Recurse -File | Select-Object FullName
 `Unblock-File` is not optional. Files that came out of a GitHub zip carry the
 mark of the web and will not run until they are unblocked.
 
-That last line should print 13 files, one of them ending in
+That last line should print 15 files, one of them ending in
 `rules\correlation-rules.json`. **Keep the folder structure.** The scripts
 resolve paths relative to themselves, and the analysis step looks for the
 `rules` subfolder. Flatten it and every run fails.
@@ -129,7 +129,66 @@ Get-ChildItem C:\Tools\EndpointHealth -Include *.ps1,*.psm1 -Recurse | ForEach-O
 }
 ```
 
-All nine code files must say `ok`.
+All ten code files must say `ok`.
+
+---
+
+## Part 2b. The browser console (optional, once)
+
+Everything in Parts 3 to 5 can be driven from a browser instead of the command
+line. One host runs the console, techs point a browser at it.
+
+**It must not run as a Domain Admin.** Create a dedicated service account with
+local administrator on the workstations under investigation (assign it through
+a GPO restricted group) and Modify on the share. Tier 0 credentials have no
+business on a Tier 2 endpoint, and the console never asks for a password
+anyway.
+
+Create an AD group for the people allowed to use it, for example
+`FCCI-EndpointHealth-Admins`, and put your techs in it.
+
+```powershell
+# On the console host, elevated, as the service account.
+
+# 1. Certificate from the internal CA for this host's FQDN
+Get-Certificate -Template WebServer -DnsName "EHCONSOLE.corp.local" `
+    -CertStoreLocation Cert:\LocalMachine\My
+
+# 2. Thumbprint of what you just got
+Get-ChildItem Cert:\LocalMachine\My | Format-List Subject, Thumbprint
+
+# 3. Bind it to the port
+netsh http add sslcert ipport=0.0.0.0:8443 certhash=<THUMBPRINT> `
+    appid="{00000000-0000-0000-0000-000000000042}"
+
+# 4. Let the console reserve the namespace
+netsh http add urlacl url=https://+:8443/ user="CORP\svc-endpointhealth"
+
+# 5. Open the port
+New-NetFirewallRule -DisplayName "EndpointHealth console" -Direction Inbound `
+    -Protocol TCP -LocalPort 8443 -Action Allow
+
+# 6. Start it
+.\Start-HealthConsole.ps1 -AllowedGroup 'CORP\FCCI-EndpointHealth-Admins'
+```
+
+Techs then browse to `https://ehconsole.corp.local:8443/`. Kerberos signs them
+in silently with the credentials they already have. Nobody types a password,
+and anyone outside the group gets a 403.
+
+Skip steps 1 to 5 entirely if you just want it on your own machine:
+
+```powershell
+.\Start-HealthConsole.ps1 -Local
+```
+
+That binds 127.0.0.1 only, over plain HTTP, with no authentication, because
+nothing outside your own session can reach it. It refuses to bind a network
+address in that mode.
+
+If the console reports no certificate is bound, it prints these exact commands
+with your host's name already filled in. Read them off the console rather than
+retyping from here.
 
 ---
 

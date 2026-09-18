@@ -241,6 +241,8 @@ Neither is required and both are skipped silently when absent.
 | `Invoke-DeepCapture.ps1` | Trigger-fired WPR / Procmon burst. |
 | `Invoke-TelemetryAnalysis.ps1` | Rules engine, writes SUMMARY.txt. |
 | `New-HealthReport.ps1` | Builds REPORT.html, the traceable view of the findings. |
+| `Start-HealthConsole.ps1` | Browser console. Kerberos auth, AD group gated. |
+| `console\index.html` | The console UI. Served by the console, not opened directly. |
 | `EndpointHealth.psm1` | Shared library. |
 | `rules\correlation-rules.json` | The findings logic. Edit this, not the code. |
 | `config.sample.json` | Copy to `config.json` and edit. |

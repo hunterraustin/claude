@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EndpointHealth Console</title>
+<style>
+:root{
+  --bg:#f6f7f9; --panel:#fff; --ink:#15181d; --muted:#5d6570; --line:#dfe3e8;
+  --accent:#2f6fd0; --chip:#eef1f5;
+  --ok:#1f7a4d; --okbg:#e9f5ef; --warn:#8a6a00; --warnbg:#fbf5e0;
+  --bad:#b3261e; --badbg:#fdeceb;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1216; --panel:#171b21; --ink:#e7eaee; --muted:#98a1ad; --line:#2a313a;
+    --accent:#6fa3f0; --chip:#222932;
+    --ok:#6fd39b; --okbg:#122219; --warn:#e8cf72; --warnbg:#26220f;
+    --bad:#ff8a80; --badbg:#2a1614;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1216; --panel:#171b21; --ink:#e7eaee; --muted:#98a1ad; --line:#2a313a;
+  --accent:#6fa3f0; --chip:#222932;
+  --ok:#6fd39b; --okbg:#122219; --warn:#e8cf72; --warnbg:#26220f;
+  --bad:#ff8a80; --badbg:#2a1614;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+.wrap{max-width:1080px;margin:0 auto;padding:22px 16px 80px}
+header.top{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start;justify-content:space-between;margin-bottom:6px}
+h1{font-size:19px;margin:0 0 3px;letter-spacing:-.01em}
+.sub{color:var(--muted);font-size:13px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin:14px 0}
+h2{font-size:13px;margin:0 0 12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+label{display:block;font-size:12px;color:var(--muted);margin-bottom:4px}
+input,select{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;
+  background:var(--panel);color:var(--ink);font:inherit;font-size:14px}
+input:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
+button{padding:8px 14px;border:1px solid var(--line);border-radius:8px;background:var(--panel);
+  color:var(--ink);font:inherit;font-size:14px;cursor:pointer}
+button:hover:not(:disabled){border-color:var(--accent);color:var(--accent)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+button.primary:hover:not(:disabled){opacity:.9;color:#fff}
+button:disabled{opacity:.5;cursor:not-allowed}
+.check{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid var(--line);font-size:14px}
+.check:last-child{border-bottom:none}
+.dot{width:9px;height:9px;border-radius:50%;flex:none;margin-top:7px}
+.dot.ok{background:var(--ok)} .dot.warn{background:var(--warn)} .dot.bad{background:var(--bad)}
+.check .t{flex:1}
+.check .d{color:var(--muted);font-size:12.5px;margin-top:2px;word-break:break-word}
+.banner{padding:11px 13px;border-radius:8px;font-size:13.5px;margin-bottom:12px}
+.banner.ok{background:var(--okbg);color:var(--ok)}
+.banner.warn{background:var(--warnbg);color:var(--warn)}
+.banner.bad{background:var(--badbg);color:var(--bad)}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);
+  padding:6px 8px;border-bottom:1px solid var(--line);font-weight:600}
+td{padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+tr:last-child td{border-bottom:none}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px}
+pre{background:var(--chip);padding:11px;border-radius:8px;overflow:auto;font-size:12.5px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;margin:0;max-height:300px;white-space:pre-wrap;word-break:break-word}
+.tabs{display:flex;gap:4px;flex-wrap:wrap;border-bottom:1px solid var(--line);margin-bottom:0}
+.tab{padding:9px 14px;border:none;background:none;color:var(--muted);font-size:14px;cursor:pointer;
+  border-bottom:2px solid transparent;border-radius:0}
+.tab:hover{color:var(--ink)}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+.pane{display:none} .pane.active{display:block}
+.muted{color:var(--muted);font-size:13px}
+.pill{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;
+  padding:2px 7px;border-radius:999px;background:var(--chip);color:var(--muted)}
+.pill.ok{background:var(--okbg);color:var(--ok)}
+.pill.bad{background:var(--badbg);color:var(--bad)}
+.pill.warn{background:var(--warnbg);color:var(--warn)}
+ol{padding-left:20px;margin:0} ol li{margin-bottom:7px;font-size:13.5px}
+@media (max-width:640px){ .wrap{padding:14px 14px 60px} }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <div>
+    <h1>EndpointHealth console</h1>
+    <div class="sub" id="session">connecting...</div>
+  </div>
+  <button id="theme">Toggle theme</button>
+</header>
+
+<div class="tabs">
+  <button class="tab active" data-pane="p-run">Run</button>
+  <button class="tab" data-pane="p-reports">Reports</button>
+  <button class="tab" data-pane="p-setup">Setup</button>
+  <button class="tab" data-pane="p-me">Endpoint Central</button>
+  <button class="tab" data-pane="p-jobs">Activity</button>
+</div>
+
+<!-- RUN -->
+<div class="pane active" id="p-run">
+  <section class="panel">
+    <h2>Readiness</h2>
+    <div id="preflight-banner"></div>
+    <div id="preflight">Checking...</div>
+    <div class="row">
+      <button id="recheck">Re-check</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Start a collection</h2>
+    <div class="grid">
+      <div>
+        <label for="scope">Where</label>
+        <select id="scope">
+          <option value="local">This machine</option>
+          <option value="remote">Remote computer (needs WinRM)</option>
+        </select>
+      </div>
+      <div id="target-wrap" style="display:none">
+        <label for="target">Computer name</label>
+        <input id="target" placeholder="WKS042" autocomplete="off">
+      </div>
+      <div>
+        <label for="mode">What</label>
+        <select id="mode">
+          <option value="Snapshot">Snapshot, one-shot, a few minutes</option>
+          <option value="Campaign">Campaign, bounded, survives reboots</option>
+          <option value="Status">Status, what is running there now</option>
+          <option value="Stop">Stop a running campaign</option>
+          <option value="Analyze">Re-analyse data already collected</option>
+        </select>
+      </div>
+      <div id="days-wrap" style="display:none">
+        <label for="days">Campaign length (days)</label>
+        <input id="days" type="number" min="1" max="30" value="7">
+      </div>
+      <div id="engine-wrap" style="display:none">
+        <label for="engine">Deep capture engine</label>
+        <select id="engine">
+          <option value="WPR">WPR, built into Windows</option>
+          <option value="Procmon">Procmon, needs Procmon64.exe</option>
+          <option value="Both">Both</option>
+          <option value="None">None</option>
+        </select>
+      </div>
+    </div>
+    <div class="row">
+      <button class="primary" id="go">Run it</button>
+      <span class="muted" id="run-note">A script with these exact values is written to disk before anything executes.</span>
+    </div>
+  </section>
+</div>
+
+<!-- REPORTS -->
+<div class="pane" id="p-reports">
+  <section class="panel">
+    <h2>Reports on the share</h2>
+    <div class="grid">
+      <div style="grid-column:1/-1">
+        <label for="runs">Run folder</label>
+        <select id="runs"><option>Loading...</option></select>
+      </div>
+    </div>
+    <div class="row">
+      <button class="primary" id="open-report">Open report</button>
+      <button id="refresh-runs">Refresh list</button>
+      <span class="muted" id="runs-note"></span>
+    </div>
+  </section>
+</div>
+
+<!-- SETUP -->
+<div class="pane" id="p-setup">
+  <section class="panel">
+    <h2>Variables</h2>
+    <p class="muted" style="margin-top:-4px;margin-bottom:12px">
+      Saved to config.json on this host and used for every run started here.
+    </p>
+    <div class="grid">
+      <div style="grid-column:1/-1">
+        <label for="sharePath">Share path (UNC)</label>
+        <input id="sharePath" class="mono" placeholder="\\FS01\EndpointHealth$" autocomplete="off">
+      </div>
+      <div style="grid-column:1/-1">
+        <label for="toolsPath">Tools path (optional binaries)</label>
+        <input id="toolsPath" class="mono" autocomplete="off">
+      </div>
+      <div>
+        <label for="campaignDays">Default campaign days</label>
+        <input id="campaignDays" type="number" min="1" max="30">
+      </div>
+      <div>
+        <label for="sampleIntervalMinutes">Sample interval (minutes)</label>
+        <input id="sampleIntervalMinutes" type="number" min="1" max="60">
+      </div>
+      <div>
+        <label for="uploadIntervalMinutes">Upload interval (minutes)</label>
+        <input id="uploadIntervalMinutes" type="number" min="5" max="1440">
+      </div>
+      <div>
+        <label for="folderNameStyle">Folder naming</label>
+        <select id="folderNameStyle">
+          <option value="Compact">Compact: HOST_9-17_1059</option>
+          <option value="Sortable">Sortable: HOST_2026-09-17_1059</option>
+        </select>
+      </div>
+      <div>
+        <label for="captureEngine">Default capture engine</label>
+        <select id="captureEngine">
+          <option value="WPR">WPR</option>
+          <option value="Procmon">Procmon</option>
+          <option value="Both">Both</option>
+          <option value="None">None</option>
+        </select>
+      </div>
+      <div>
+        <label for="redactUserNames">Redact usernames in collected paths</label>
+        <select id="redactUserNames">
+          <option value="false">No</option>
+          <option value="true">Yes</option>
+        </select>
+      </div>
+    </div>
+    <div class="row">
+      <button class="primary" id="save-config">Save and validate</button>
+      <span class="muted" id="save-note"></span>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Optional binaries</h2>
+    <div id="deps">Loading...</div>
+  </section>
+</div>
+
+<!-- ENDPOINT CENTRAL -->
+<div class="pane" id="p-me">
+  <section class="panel">
+    <h2>Deploy from Endpoint Central</h2>
+    <p class="muted" style="margin-top:-4px;margin-bottom:12px">
+      For several machines at once, without touching any of them. Endpoint Central runs scripts as
+      SYSTEM, which is what the sampler needs.
+    </p>
+    <div id="me-content">Loading...</div>
+  </section>
+</div>
+
+<!-- JOBS -->
+<div class="pane" id="p-jobs">
+  <section class="panel">
+    <h2>Activity</h2>
+    <div class="row" style="margin-top:0;margin-bottom:12px">
+      <button id="refresh-jobs">Refresh</button>
+      <span class="muted">Jobs started from this console since it began listening.</span>
+    </div>
+    <div id="jobs">Nothing yet.</div>
+  </section>
+</div>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var TOKEN = "__EH_TOKEN__";
+
+  function esc(s){
+    if (s === null || s === undefined) return '';
+    return String(s).replace(/[&<>"']/g,function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+  function $(id){ return document.getElementById(id); }
+
+  function api(path, opts){
+    opts = opts || {};
+    var init = { method: opts.method || 'GET', headers: { 'X-EH-Token': TOKEN }, credentials: 'include' };
+    if (opts.body){ init.headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(opts.body); }
+    return fetch(path, init).then(function(r){
+      return r.json().catch(function(){ return { error: 'Unreadable response (HTTP ' + r.status + ')' }; })
+        .then(function(j){
+          if (!r.ok) throw new Error(j && j.error ? j.error : 'HTTP ' + r.status);
+          return j;
+        });
+    });
+  }
+
+  // tabs
+  var tabs = document.querySelectorAll('.tab');
+  for (var i = 0; i < tabs.length; i++){
+    tabs[i].addEventListener('click', function(e){
+      document.querySelectorAll('.tab').forEach(function(t){ t.classList.remove('active'); });
+      document.querySelectorAll('.pane').forEach(function(p){ p.classList.remove('active'); });
+      e.target.classList.add('active');
+      $(e.target.getAttribute('data-pane')).classList.add('active');
+    });
+  }
+
+  $('theme').addEventListener('click', function(){
+    var cur = document.documentElement.getAttribute('data-theme');
+    var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    var next = cur === 'dark' ? 'light' : (cur === 'light' ? 'dark' : (dark ? 'light' : 'dark'));
+    document.documentElement.setAttribute('data-theme', next);
+    try { localStorage.setItem('ehc-theme', next); } catch(e){}
+  });
+  try { var t = localStorage.getItem('ehc-theme'); if (t) document.documentElement.setAttribute('data-theme', t); } catch(e){}
+
+  // session
+  api('/api/session').then(function(s){
+    var bits = ['signed in as <strong>' + esc(s.user) + '</strong>'];
+    bits.push('console on ' + esc(s.host));
+    bits.push('acting as ' + esc(s.runningAs));
+    bits.push(s.mode === 'local' ? 'loopback mode' : 'Kerberos, group ' + esc(s.allowedGroup));
+    $('session').innerHTML = bits.join(' &middot; ');
+  }).catch(function(e){
+    $('session').innerHTML = '<span style="color:var(--bad)">' + esc(e.message) + '</span>';
+  });
+
+  // preflight
+  function check(state, title, detail){
+    return '<div class="check"><div class="dot ' + state + '"></div><div class="t">' +
+      esc(title) + (detail ? '<div class="d">' + esc(detail) + '</div>' : '') + '</div></div>';
+  }
+
+  function loadPreflight(){
+    $('preflight').textContent = 'Checking...';
+    return api('/api/preflight').then(function(p){
+      var h = '', blockers = 0, warnings = 0;
+
+      h += check(p.elevated ? 'ok' : 'bad', p.elevated ? 'Running elevated' : 'Not elevated',
+                 'Acting as ' + p.runningAs);
+      if (!p.elevated) blockers++;
+
+      var s = p.share;
+      if (!s.configured){ h += check('bad', 'Share path not configured', s.detail); blockers++; }
+      else if (!s.reachable){ h += check('bad', 'Share not reachable: ' + s.path, s.detail); blockers++; }
+      else if (!s.writable){ h += check('bad', 'Share reachable but not writable', s.detail); blockers++; }
+      else { h += check('ok', 'Share reachable and writable', s.path + ' - ' + s.detail); }
+
+      var a = p.agent;
+      if (a.missing > 0){ h += check('bad', a.missing + ' toolkit file(s) missing from this folder',
+        'Keep the folder structure intact, including the rules subfolder.'); blockers++; }
+      else if (a.stale > 0){ h += check('warn', a.stale + ' file(s) stale in the installed agent',
+        'The copy at ' + a.agentDir + ' is older than this one. The next run reinstalls it.'); warnings++; }
+      else if (a.notInstalled > 0){ h += check('warn', 'Agent not installed on this host yet',
+        'Expected before the first run. It installs itself to ' + a.agentDir + ' when a collection starts.'); }
+      else { h += check('ok', 'Toolkit files present and current', a.agentDir); }
+
+      var d = p.dependencies;
+      d.items.forEach(function(it){
+        h += it.present
+          ? check('ok', it.name + ' present', it.purpose)
+          : check('warn', it.name + ' not present', it.purpose + '. Optional, skipped silently when absent.');
+        if (!it.present) warnings++;
+      });
+
+      if (p.certThumbprint) h += check('ok', 'TLS certificate bound', p.certThumbprint);
+
+      $('preflight').innerHTML = h;
+
+      var b = $('preflight-banner');
+      if (blockers > 0){
+        b.className = 'banner bad';
+        b.textContent = blockers + ' blocker(s). A campaign will collect but deliver nothing until these are fixed.';
+      } else if (warnings > 0){
+        b.className = 'banner warn';
+        b.textContent = 'Ready. ' + warnings + ' optional item(s) missing, which only limits deep capture detail.';
+      } else {
+        b.className = 'banner ok';
+        b.textContent = 'Everything checks out. Safe to run.';
+      }
+      $('go').disabled = blockers > 0;
+    }).catch(function(e){
+      $('preflight').innerHTML = '<div class="banner bad">' + esc(e.message) + '</div>';
+    });
+  }
+  loadPreflight();
+  $('recheck').addEventListener('click', loadPreflight);
+
+  // run form visibility
+  function syncForm(){
+    $('target-wrap').style.display = $('scope').value === 'remote' ? '' : 'none';
+    var m = $('mode').value;
+    $('days-wrap').style.display = m === 'Campaign' ? '' : 'none';
+    $('engine-wrap').style.display = (m === 'Campaign' || m === 'Snapshot') ? '' : 'none';
+  }
+  $('scope').addEventListener('change', syncForm);
+  $('mode').addEventListener('change', syncForm);
+  syncForm();
+
+  $('go').addEventListener('click', function(){
+    var body = { mode: $('mode').value, scope: $('scope').value, target: $('target').value.trim(),
+                 days: parseInt($('days').value, 10) || 7, engine: $('engine').value };
+    $('go').disabled = true;
+    $('run-note').textContent = 'Starting...';
+    api('/api/run', { method: 'POST', body: body }).then(function(j){
+      $('run-note').textContent = 'Started job ' + j.id + '. See Activity.';
+      $('go').disabled = false;
+      loadJobs();
+    }).catch(function(e){
+      $('run-note').innerHTML = '<span style="color:var(--bad)">' + esc(e.message) + '</span>';
+      $('go').disabled = false;
+    });
+  });
+
+  // reports
+  function loadRuns(){
+    return api('/api/runs').then(function(runs){
+      var sel = $('runs');
+      if (!runs || !runs.length){
+        sel.innerHTML = '<option value="">No runs found</option>';
+        $('runs-note').textContent = 'Nothing on the share yet.';
+        $('open-report').disabled = true;
+        return;
+      }
+      sel.innerHTML = runs.map(function(r){
+        return '<option value="' + esc(r.name) + '">' + esc(r.name) + '  (' + esc(r.location) +
+               ', ' + esc(r.modified) + (r.hasReport ? '' : ', report builds on open') + ')</option>';
+      }).join('');
+      $('runs-note').textContent = runs.length + ' run(s).';
+      $('open-report').disabled = false;
+    }).catch(function(e){
+      $('runs-note').innerHTML = '<span style="color:var(--bad)">' + esc(e.message) + '</span>';
+    });
+  }
+  loadRuns();
+  $('refresh-runs').addEventListener('click', loadRuns);
+  $('open-report').addEventListener('click', function(){
+    var name = $('runs').value;
+    if (name) window.open('/api/report/' + encodeURIComponent(name), '_blank');
+  });
+
+  // config
+  var CFG_FIELDS = ['sharePath','toolsPath','campaignDays','sampleIntervalMinutes',
+                    'uploadIntervalMinutes','folderNameStyle','captureEngine','redactUserNames'];
+  api('/api/config').then(function(c){
+    CFG_FIELDS.forEach(function(f){
+      if (c[f] !== undefined && c[f] !== null) $(f).value = String(c[f]).toLowerCase() === 'true' ? 'true' :
+        (String(c[f]).toLowerCase() === 'false' ? 'false' : c[f]);
+    });
+  }).catch(function(){});
+
+  $('save-config').addEventListener('click', function(){
+    var body = {};
+    CFG_FIELDS.forEach(function(f){ body[f] = $(f).value; });
+    body.campaignDays = parseInt(body.campaignDays, 10) || 7;
+    body.sampleIntervalMinutes = parseInt(body.sampleIntervalMinutes, 10) || 5;
+    body.uploadIntervalMinutes = parseInt(body.uploadIntervalMinutes, 10) || 60;
+    body.redactUserNames = body.redactUserNames === 'true';
+    $('save-note').textContent = 'Saving...';
+    api('/api/config', { method: 'POST', body: body }).then(function(j){
+      $('save-note').textContent = 'Saved to ' + j.configFile + '. Re-validating...';
+      return loadPreflight();
+    }).then(function(){
+      $('save-note').textContent = 'Saved and validated.';
+      loadRuns();
+      loadDeps();
+    }).catch(function(e){
+      $('save-note').innerHTML = '<span style="color:var(--bad)">' + esc(e.message) + '</span>';
+    });
+  });
+
+  // dependencies
+  function loadDeps(){
+    return api('/api/preflight').then(function(p){
+      var d = p.dependencies;
+      var h = '<table><thead><tr><th>binary</th><th>what it adds</th><th>state</th><th></th></tr></thead><tbody>';
+      d.items.forEach(function(it){
+        h += '<tr><td class="mono">' + esc(it.name) + '</td><td>' + esc(it.purpose) + '</td>' +
+             '<td><span class="pill ' + (it.present ? 'ok' : 'warn') + '">' +
+             (it.present ? 'present' : 'absent') + '</span></td><td>' +
+             (it.present || !d.wingetAvailable ? '' :
+               '<button data-pkg="' + esc(it.package) + '" class="dep-install">Install via winget</button>') +
+             '</td></tr>';
+      });
+      h += '</tbody></table>';
+      h += '<p class="muted" style="margin-bottom:0">Both are optional and skipped silently when absent. Drop them in ' +
+           esc(d.toolsPath) + '.';
+      if (!d.wingetAvailable){
+        h += ' winget is not available in this context, which is expected under a service account: it is an ' +
+             'MSIX-packaged app and does not run outside an interactive user session. Copy the binaries in by hand.';
+      }
+      h += '</p>';
+      $('deps').innerHTML = h;
+
+      document.querySelectorAll('.dep-install').forEach(function(b){
+        b.addEventListener('click', function(){
+          b.disabled = true; b.textContent = 'Installing...';
+          api('/api/deps/install', { method: 'POST', body: { package: b.getAttribute('data-pkg') } })
+            .then(function(){ loadDeps(); })
+            .catch(function(e){ b.textContent = 'Failed'; alert(e.message); });
+        });
+      });
+    }).catch(function(e){
+      $('deps').innerHTML = '<div class="banner bad">' + esc(e.message) + '</div>';
+    });
+  }
+  loadDeps();
+
+  // endpoint central
+  api('/api/manageengine').then(function(m){
+    var h = '<label>Campaign arguments</label><pre id="me-args">' + esc(m.campaignArgs) + '</pre>' +
+            '<div class="row"><button id="copy-args">Copy</button>' +
+            '<span class="muted" id="copy-note"></span></div>' +
+            '<label style="margin-top:16px">Snapshot arguments</label><pre>' + esc(m.snapshotArgs) + '</pre>' +
+            '<h2 style="margin-top:20px">Steps</h2><ol>' +
+            m.steps.map(function(s){ return '<li>' + esc(s) + '</li>'; }).join('') + '</ol>' +
+            '<p class="muted">' + esc(m.note) + '</p>';
+    $('me-content').innerHTML = h;
+    $('copy-args').addEventListener('click', function(){
+      var text = $('me-args').textContent;
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(text).then(function(){ $('copy-note').textContent = 'Copied.'; },
+          function(){ $('copy-note').textContent = 'Copy failed, select it manually.'; });
+      } else { $('copy-note').textContent = 'Select it manually.'; }
+    });
+  }).catch(function(e){
+    $('me-content').innerHTML = '<div class="banner bad">' + esc(e.message) + '</div>';
+  });
+
+  // jobs
+  function loadJobs(){
+    return api('/api/jobs').then(function(jobs){
+      if (!jobs || !jobs.length){ $('jobs').innerHTML = '<p class="muted">Nothing yet.</p>'; return; }
+      $('jobs').innerHTML = jobs.map(function(j){
+        var cls = j.state === 'Completed' ? 'ok' : (j.state === 'Failed' ? 'bad' : 'warn');
+        return '<div style="margin-bottom:16px">' +
+          '<div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:6px">' +
+            '<span class="pill ' + cls + '">' + esc(j.state) + '</span>' +
+            '<strong>' + esc(j.mode) + '</strong> on <strong>' + esc(j.target) + '</strong>' +
+            '<span class="muted">' + esc(j.started) + ' by ' + esc(j.requestedBy) + '</span>' +
+          '</div>' +
+          '<div class="muted mono" style="margin-bottom:5px">' + esc(j.scriptPath) + '</div>' +
+          (j.output ? '<pre>' + esc(j.output) + '</pre>' : '<p class="muted">No output yet.</p>') +
+        '</div>';
+      }).join('');
+    }).catch(function(e){
+      $('jobs').innerHTML = '<div class="banner bad">' + esc(e.message) + '</div>';
+    });
+  }
+  $('refresh-jobs').addEventListener('click', loadJobs);
+  loadJobs();
+  setInterval(function(){
+    if ($('p-jobs').classList.contains('active')) loadJobs();
+  }, 5000);
+})();
+</script>
+</body>
+</html>
